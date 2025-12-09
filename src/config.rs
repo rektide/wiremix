@@ -38,6 +38,7 @@ pub struct Config {
     pub help: help::Help,
     pub names: Names,
     pub tab: TabKind,
+    pub database_url: Option<String>,
 }
 
 /// Represents a configuration deserialized from a file. This gets baked into a
@@ -48,6 +49,8 @@ pub struct Config {
 struct ConfigFile {
     remote: Option<String>,
     fps: Option<f32>,
+    #[serde(default)]
+    database_url: Option<String>,
     #[serde(default = "default_mouse")]
     mouse: bool,
     #[serde(default = "default_peaks")]
@@ -315,6 +318,7 @@ impl TryFrom<ConfigFile> for Config {
             help,
             names: config_file.names,
             tab: config_file.tab.unwrap_or_default(),
+            database_url: config_file.database_url,
         })
     }
 }
@@ -391,6 +395,7 @@ pub mod strict {
         #[serde(deserialize_with = "themes")]
         themes: HashMap<String, Theme>,
         tab: Option<TabKind>,
+        database_url: Option<String>,
     }
 
     impl From<ConfigFile> for super::ConfigFile {
@@ -409,6 +414,7 @@ pub mod strict {
                 char_sets: strict.char_sets,
                 themes: strict.themes,
                 tab: strict.tab,
+                database_url: strict.database_url,
             }
         }
     }

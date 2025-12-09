@@ -260,9 +260,21 @@ impl<'a> App<'a> {
             current_peak + (new_peak - current_peak) * coef
         };
 
-        let state = State::default()
+        let mut state = State::default()
             .with_peak_processor(Box::new(peak_processor))
             .with_capture(config.peaks != Peaks::Off);
+
+        // Initialize database if configured
+        if let Some(database_url) = &config.database_url {
+            match crate::db::Database::new(database_url) {
+                Ok(database) => {
+                    state = state.with_database(database);
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to initialize database at '{}': {}", database_url, e);
+                }
+            }
+        }
 
         App {
             exit: false,
@@ -794,6 +806,7 @@ mod tests {
             help: Default::default(),
             names: Default::default(),
             tab: Default::default(),
+            database_url: None,
         };
 
         let mut app = App::new(wirehose, event_rx, config);
@@ -878,6 +891,7 @@ mod tests {
             help: Default::default(),
             names: Default::default(),
             tab: Default::default(),
+            database_url: None,
         };
         let mut app = App::new(&wirehose, event_rx, config);
 
