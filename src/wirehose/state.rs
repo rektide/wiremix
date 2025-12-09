@@ -2,10 +2,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::wirehose::{
+use crate::{db::Database, wirehose::{
     command::Command, media_class, CommandSender, ObjectId, PropertyStore,
     StateEvent,
-};
+}};
 
 #[derive(Debug)]
 pub struct Profile {
@@ -160,6 +160,7 @@ pub struct State {
     pub metadatas_by_name: HashMap<String, ObjectId>,
     peak_processor: Option<Box<dyn PeakProcessor>>,
     capturing: Option<HashSet<ObjectId>>,
+    database: Option<Database>,
 }
 
 impl State {
@@ -178,6 +179,55 @@ impl State {
         self
     }
 
+    /// Set database for persistence.
+    pub fn with_database(mut self, database: Database) -> Self {
+        self.database = Some(database);
+        self
+    }
+
+
+
+    /// Helper methods to persist state changes
+    fn persist_client(&self, object_id: ObjectId) {
+        if let Some(db) = &self.database {
+            if let Some(client) = self.clients.get(&object_id) {
+                let _ = db.upsert_client(client);
+            }
+        }
+    }
+
+    fn persist_node(&self, object_id: ObjectId) {
+        if let Some(db) = &self.database {
+            if let Some(node) = self.nodes.get(&object_id) {
+                let _ = db.upsert_node(node);
+            }
+        }
+    }
+
+    fn persist_device(&self, object_id: ObjectId) {
+        if let Some(db) = &self.database {
+            if let Some(device) = self.devices.get(&object_id) {
+                let _ = db.upsert_device(device);
+            }
+        }
+    }
+
+    fn persist_link(&self, object_id: ObjectId) {
+        if let Some(db) = &self.database {
+            if let Some(link) = self.links.get(&object_id) {
+                let _ = db.upsert_link(object_id, link);
+            }
+        }
+    }
+
+    fn persist_metadata(&self, object_id: ObjectId) {
+        if let Some(db) = &self.database {
+            if let Some(metadata) = self.metadatas.get(&object_id) {
+                let _ = db.upsert_metadata(metadata);
+            }
+        }
+    }
+
     /// Update the state based on the supplied event. Also handles capture
     /// management for starting and stopping streaming.
     pub fn update(&mut self, wirehose: &dyn CommandSender, event: StateEvent) {
@@ -186,9 +236,11 @@ impl State {
         match event {
             StateEvent::ClientProperties { object_id, props } => {
                 self.client_entry(object_id).props = props;
+                self.persist_client(object_id);
             }
             StateEvent::DeviceProperties { object_id, props } => {
                 self.device_entry(object_id).props = props;
+                self.persist_device(object_id);
             }
             StateEvent::DeviceEnumProfile {
                 object_id,
@@ -206,9 +258,11 @@ impl State {
                         classes,
                     },
                 );
+                self.persist_device(object_id);
             }
             StateEvent::DeviceProfile { object_id, index } => {
                 self.device_entry(object_id).profile_index = Some(index);
+                self.persist_device(object_id);
             }
             StateEvent::DeviceRoute {
                 object_id: id,
@@ -232,6 +286,7 @@ impl State {
                         mute,
                     },
                 );
+                self.persist_device(id);
             }
             StateEvent::DeviceEnumRoute {
                 object_id,
@@ -251,9 +306,11 @@ impl State {
                         devices,
                     },
                 );
+                self.persist_device(object_id);
             }
             StateEvent::NodeProperties { object_id, props } => {
                 self.node_entry(object_id).props = props;
+                self.persist_node(object_id);
 
                 if let Some(node) = self.nodes.get(&object_id) {
                     commands.extend(self.on_node(node));
@@ -261,6 +318,7 @@ impl State {
             }
             StateEvent::NodeMute { object_id, mute } => {
                 self.node_entry(object_id).mute = Some(mute);
+                self.persist_node(object_id);
             }
             StateEvent::NodePeaks {
                 object_id,
@@ -274,9 +332,11 @@ impl State {
                     });
                 let peak_processor = self.peak_processor.as_deref();
                 node.update_peaks(&peaks, samples, peak_processor);
+                self.persist_node(object_id);
             }
             StateEvent::NodeRate { object_id, rate } => {
                 self.node_entry(object_id).rate = Some(rate);
+                self.persist_node(object_id);
             }
             StateEvent::NodePositions {
                 object_id,
@@ -292,9 +352,11 @@ impl State {
                     }
                 }
                 self.node_entry(object_id).positions = Some(positions);
+                self.persist_node(object_id);
             }
             StateEvent::NodeVolumes { object_id, volumes } => {
                 self.node_entry(object_id).volumes = Some(volumes);
+                self.persist_node(object_id);
             }
             StateEvent::Link {
                 object_id,
@@ -314,6 +376,7 @@ impl State {
                         input_id,
                     },
                 );
+                self.persist_link(object_id);
             }
             StateEvent::MetadataMetadataName {
                 object_id,
@@ -322,6 +385,7 @@ impl State {
                 self.metadata_entry(object_id).metadata_name =
                     Some(metadata_name.clone());
                 self.metadatas_by_name.insert(metadata_name, object_id);
+                self.persist_metadata(object_id);
             }
             StateEvent::MetadataProperty {
                 object_id,
@@ -336,21 +400,32 @@ impl State {
                     .or_default();
                 match key {
                     Some(key) => {
+                        let key_clone = key.clone();
                         match value {
-                            Some(value) => {
+                            Some(ref value) => {
                                 properties.insert(key, value.clone())
                             }
-                            None => properties.remove(&key),
+                            None => properties.remove(&key_clone),
                         };
+                        // Update database - we'll persist after updating the hashmap
+                        // The persist_metadata call at the end will handle this
                     }
-                    None => properties.clear(),
+                    None => {
+                        properties.clear();
+                        // Update database
+                        if let Some(db) = &self.database {
+                            let _ = db.clear_metadata_properties(object_id, subject);
+                        }
+                    },
                 };
+                self.persist_metadata(object_id);
             }
             StateEvent::StreamStopped { object_id } => {
                 // It's likely that the node doesn't exist anymore.
                 self.nodes
                     .entry(object_id)
                     .and_modify(|node| node.peaks = None);
+                self.persist_node(object_id);
             }
             StateEvent::Removed { object_id } => {
                 // Remove from links and stop capture if the last input link
@@ -374,6 +449,11 @@ impl State {
                     if let Some(metadata_name) = metadata.metadata_name {
                         self.metadatas_by_name.remove(&metadata_name);
                     }
+                }
+
+                // Remove from database
+                if let Some(db) = &self.database {
+                    let _ = db.remove_object(object_id);
                 }
             }
         }
