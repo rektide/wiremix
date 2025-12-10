@@ -2,7 +2,7 @@
 
 **Session ID:** ses_4f9eb7ec7ffeWU5bymT87g452C
 **Created:** 12/10/2025, 2:26:05 AM
-**Updated:** 12/10/2025, 9:20:04 AM
+**Updated:** 12/10/2025, 9:30:30 AM
 
 ---
 
@@ -564,3 +564,143 @@ I have successfully converted the wiremix codebase from using `block_on` stateme
 The implementation maintains all the existing functionality while providing a much cleaner separation between the application logic and database persistence layer. All existing tests pass, and the new threaded architecture has been thoroughly tested.
 
 ---
+
+## User
+
+currently @src/db_channel.rs seems to duplicate a lot of @src/db.rs . all database logic should be in db.rs. db.rs should avoid calling block_on unless it needs to. it's ok if db_channel needs to have block_on.
+
+---
+
+## Assistant
+
+You're absolutely right! There's a lot of duplication between the two files. Let me refactor this to move all the database logic to `db.rs` and make `db_channel.rs` just handle the threading and message passing.
+
+```
+Tool: todowrite
+```
+
+---
+
+## Assistant
+
+First, let me refactor `db.rs` to be a proper database operations module that can be called from the thread. I'll create a new `Database` struct that doesn't use `block_on` internally:
+
+```
+Tool: write
+```
+
+---
+
+## Assistant
+
+Now let me simplify `db_channel.rs` to only handle threading and message passing, using the database operations from `db.rs`:
+
+```
+Tool: write
+```
+
+---
+
+## Assistant
+
+Now let me check if we need to add tokio as a dependency for the database thread. Let me check the current Cargo.toml:
+
+```
+Tool: read
+```
+
+---
+
+## Assistant
+
+Good, tokio is already included. Now let me test the refactored code:
+
+```
+Tool: bash
+```
+
+---
+
+## Assistant
+
+Let me fix the unused imports:
+
+```
+Tool: edit
+```
+
+---
+
+## Assistant
+
+```
+Tool: bash
+```
+
+---
+
+## Assistant
+
+Great! Now let me run the tests to make sure the refactoring didn't break anything:
+
+```
+Tool: bash
+```
+
+---
+
+## Assistant
+
+Perfect! All tests pass. Now let me update the todo list and create a summary:
+
+```
+Tool: todowrite
+```
+
+---
+
+## Assistant
+
+## Summary
+
+I have successfully refactored the codebase to eliminate duplication between `db.rs` and `db_channel.rs` as requested. Here's what was accomplished:
+
+### Key Changes:
+
+1. **Refactored `db.rs`**:
+   - Converted to a clean async database operations module
+   - All methods are now `async` and don't use `block_on` internally
+   - Contains all the actual database logic (CRUD operations for all object types)
+   - Uses proper async/await patterns with Turso database
+
+2. **Simplified `db_channel.rs`**:
+   - Now only handles threading and message passing
+   - Contains only the `DbMessage` enum, `DatabaseHandle`, and `DatabaseThread` 
+   - Uses `block_on` only in the database thread to bridge between sync and async worlds
+   - Delegates all database operations to the refactored `db.rs` module
+
+3. **Clean Architecture**:
+   - `db.rs`: Pure database operations (async)
+   - `db_channel.rs`: Threading and message routing (sync with async bridge)
+   - `state.rs`: State management with channel communication
+   - `app.rs`: Application initialization and coordination
+
+### Benefits:
+
+1. **No Duplication**: All database logic is now centralized in `db.rs`
+2. **Clean Separation**: Threading logic is separate from database operations
+3. **Better Async Handling**: `block_on` is only used in the database thread where it's necessary
+4. **Maintainability**: Easier to modify database operations without affecting threading logic
+5. **Testability**: Database operations can be tested independently of threading
+
+### How It Works:
+
+1. **Main Thread**: Sends messages via `DatabaseHandle` (non-blocking)
+2. **Database Thread**: Receives messages, creates Tokio runtime, calls async db methods
+3. **Database Operations**: Pure async methods in `db.rs` with no `block_on` calls
+4. **Error Handling**: Errors are logged but don't crash the main application
+
+The refactored architecture maintains all the existing functionality while providing a much cleaner separation of concerns. All tests pass, confirming that the refactoring was successful and the threaded database communication works correctly.
+
+---
+
