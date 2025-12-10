@@ -266,7 +266,7 @@ impl<'a> App<'a> {
 
         // Initialize database if configured
         if let Some(database_url) = &config.database_url {
-            match crate::db_channel::DatabaseThread::new(database_url) {
+            match crate::db::db_channel::DatabaseThread::new(database_url) {
                 Ok((db_thread, db_handle)) => {
                     // Start the database thread
                     db_thread.run();

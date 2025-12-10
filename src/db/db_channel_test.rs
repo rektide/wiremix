@@ -4,7 +4,7 @@
 mod tests {
     use crate::wirehose::state::{Client, State};
     use crate::wirehose::{ObjectId, PropertyStore, StateEvent};
-    use crate::db_channel::{DatabaseThread, DbMessage};
+    use crate::db::db_channel::{DatabaseThread, DbMessage};
     use crate::mock::WirehoseHandle;
     use std::time::Duration;
     use std::thread;

@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{db_channel::{DatabaseHandle, DbMessage}, wirehose::{
+use crate::{db::db_channel::{DatabaseHandle, DbMessage}, wirehose::{
     command::Command, media_class, CommandSender, ObjectId, PropertyStore,
     StateEvent,
 }};

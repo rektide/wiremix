@@ -10,7 +10,7 @@ use crate::wirehose::{
     state::{Client as WireClient, Device, Link, Metadata, Node},
     ObjectId,
 };
-use crate::db::Database;
+use super::db::Database;
 
 /// Messages sent to the database thread
 #[derive(Debug)]

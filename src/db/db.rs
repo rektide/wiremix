@@ -26,7 +26,7 @@ impl Database {
     
     async fn run_migrations(db: &TursoDatabase) -> Result<()> {
         // Read migration file
-        let up_sql = include_str!("../migrations/0001_initial_schema.up.sql");
+        let up_sql = include_str!("../../migrations/0001_initial_schema.up.sql");
         
         // Execute migration
         let conn = db.connect()?;
