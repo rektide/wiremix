@@ -266,9 +266,11 @@ impl<'a> App<'a> {
 
         // Initialize database if configured
         if let Some(database_url) = &config.database_url {
-            match crate::db::Database::new(database_url) {
-                Ok(database) => {
-                    state = state.with_database(database);
+            match crate::db_channel::DatabaseThread::new(database_url) {
+                Ok((db_thread, db_handle)) => {
+                    // Start the database thread
+                    db_thread.run();
+                    state = state.with_database(db_handle);
                 }
                 Err(e) => {
                     eprintln!("Warning: Failed to initialize database at '{}': {}", database_url, e);

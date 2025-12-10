@@ -2,12 +2,12 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::{db::Database, wirehose::{
+use crate::{db_channel::{DatabaseHandle, DbMessage}, wirehose::{
     command::Command, media_class, CommandSender, ObjectId, PropertyStore,
     StateEvent,
 }};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Profile {
     pub index: i32,
     pub description: String,
@@ -15,7 +15,7 @@ pub struct Profile {
     pub classes: Vec<(String, Vec<i32>)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EnumRoute {
     pub index: i32,
     pub description: String,
@@ -24,7 +24,7 @@ pub struct EnumRoute {
     pub devices: Vec<i32>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Route {
     pub index: i32,
     pub device: i32,
@@ -35,7 +35,7 @@ pub struct Route {
     pub mute: bool,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Device {
     pub object_id: ObjectId,
     pub props: PropertyStore,
@@ -45,13 +45,13 @@ pub struct Device {
     pub enum_routes: HashMap<i32, EnumRoute>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Client {
     pub object_id: ObjectId,
     pub props: PropertyStore,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Node {
     pub object_id: ObjectId,
     pub props: PropertyStore,
@@ -128,13 +128,13 @@ impl Node {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Link {
     pub output_id: ObjectId,
     pub input_id: ObjectId,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct Metadata {
     pub object_id: ObjectId,
     pub metadata_name: Option<String>,
@@ -160,7 +160,7 @@ pub struct State {
     pub metadatas_by_name: HashMap<String, ObjectId>,
     peak_processor: Option<Box<dyn PeakProcessor>>,
     capturing: Option<HashSet<ObjectId>>,
-    database: Option<Database>,
+    database: Option<DatabaseHandle>,
 }
 
 impl State {
@@ -180,7 +180,7 @@ impl State {
     }
 
     /// Set database for persistence.
-    pub fn with_database(mut self, database: Database) -> Self {
+    pub fn with_database(mut self, database: DatabaseHandle) -> Self {
         self.database = Some(database);
         self
     }
@@ -191,7 +191,7 @@ impl State {
     fn persist_client(&self, object_id: ObjectId) {
         if let Some(db) = &self.database {
             if let Some(client) = self.clients.get(&object_id) {
-                let _ = db.upsert_client(client);
+                let _ = db.send(DbMessage::UpsertClient(client.clone()));
             }
         }
     }
@@ -199,7 +199,7 @@ impl State {
     fn persist_node(&self, object_id: ObjectId) {
         if let Some(db) = &self.database {
             if let Some(node) = self.nodes.get(&object_id) {
-                let _ = db.upsert_node(node);
+                let _ = db.send(DbMessage::UpsertNode(node.clone()));
             }
         }
     }
@@ -207,7 +207,7 @@ impl State {
     fn persist_device(&self, object_id: ObjectId) {
         if let Some(db) = &self.database {
             if let Some(device) = self.devices.get(&object_id) {
-                let _ = db.upsert_device(device);
+                let _ = db.send(DbMessage::UpsertDevice(device.clone()));
             }
         }
     }
@@ -215,7 +215,7 @@ impl State {
     fn persist_link(&self, object_id: ObjectId) {
         if let Some(db) = &self.database {
             if let Some(link) = self.links.get(&object_id) {
-                let _ = db.upsert_link(object_id, link);
+                let _ = db.send(DbMessage::UpsertLink { object_id, link: link.clone() });
             }
         }
     }
@@ -223,7 +223,7 @@ impl State {
     fn persist_metadata(&self, object_id: ObjectId) {
         if let Some(db) = &self.database {
             if let Some(metadata) = self.metadatas.get(&object_id) {
-                let _ = db.upsert_metadata(metadata);
+                let _ = db.send(DbMessage::UpsertMetadata(metadata.clone()));
             }
         }
     }
@@ -414,7 +414,7 @@ impl State {
                         properties.clear();
                         // Update database
                         if let Some(db) = &self.database {
-                            let _ = db.clear_metadata_properties(object_id, subject);
+                            let _ = db.send(DbMessage::ClearMetadataProperties { object_id, subject });
                         }
                     },
                 };
@@ -453,7 +453,7 @@ impl State {
 
                 // Remove from database
                 if let Some(db) = &self.database {
-                    let _ = db.remove_object(object_id);
+                    let _ = db.send(DbMessage::RemoveObject(object_id));
                 }
             }
         }
